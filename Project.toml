@@ -1,0 +1,16 @@
+name = "InTheRed"
+uuid = "b2eb9f45-439f-4ab4-bea0-8dd86fe28b4d"
+authors = ["Michael Abbott <32575566+mcabbott@users.noreply.github.com>"]
+version = "0.1.0"
+
+[deps]
+# LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
+[compat]
+julia = "1.6"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
