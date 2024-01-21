@@ -16,33 +16,33 @@ julia> using InTheRed
 
 julia> rand(-3:3, 2, 10)
 2×10 Matrix{Int64}:
- -2  -2  0  0  -3   2  -1  -2  -2  -2
-  3  -3  2  3   2  -2  -1  -1  -2   2
+ 1  2  -3  -2  2  -1  1   2   1  3
+ 0  2   3  -3  2   1  0  -1  -2  2
 
 julia> x = ans .+ 0f0; x[3] = NaN; x[6] = Inf; x[end-2] = -Inf;
 
 julia> x
 2×10 Matrix{Float32}:
- -2.0  NaN     0.0  0.0  -3.0   2.0  -1.0  -2.0   -2.0  -2.0
-  3.0   -3.0  Inf   3.0   2.0  -2.0  -1.0  -1.0  -Inf    2.0
+ 1.0  NaN    -3.0  -2.0  2.0  -1.0  1.0   2.0    1.0  3.0
+ 0.0    2.0  Inf   -3.0  2.0   1.0  0.0  -1.0  -Inf   2.0
 
 julia> x .> 0
 2×10 BitMatrix:
- 0  0  0  0  0  1  0  0  0  0
- 1  0  1  1  1  0  0  0  0  1
+ 1  0  0  0  1  0  1  1  1  1
+ 0  1  1  0  1  1  0  0  0  1
 
 julia> sort(vec(x))[2:2:end]
 10-element Vector{Float32}:
-  -3.0  #  -----------------|
-  -2.0  #        -----------|
-  -2.0  #        -----------|
-  -2.0  #        -----------|
-  -1.0  #             ------|
-   0.0  #                   |
-   2.0  #                   |+++++++++++
-   2.0  #                   |+++++++++++
-   3.0  #                   |+++++++++++++++++
- NaN    #
+  -3.0  #   ╺━━━━━━━━━━━━━━━━┥
+  -2.0  #         ━━━━━━━━━━━┥
+  -1.0  #              ╺━━━━━┥
+   0.0  #                    │
+   1.0  #                    ┝━━━━━╸
+   1.0  #                    ┝━━━━━╸
+   2.0  #                    ┝━━━━━━━━━━━
+   2.0  #                    ┝━━━━━━━━━━━
+   3.0  #                    ┝━━━━━━━━━━━━━━━━╸
+ NaN    #                    ╪
 ```
 """
 module InTheRed
@@ -257,45 +257,60 @@ function Base.print_matrix(io::IO, @nospecialize(X::AbstractVector{<:Union{Real,
                       vdots::AbstractString = "\u22ee",
                       ddots::AbstractString = "  \u22f1  ",
                       hmod::Integer = 5, vmod::Integer = 5)
-    lo, hi = extrema(_finite, X) .* 1.0  # promote to at least Float64
-    Base._print_matrix(io, Base.inferencebarrier(X), pre, (sep, lo, hi), post, hdots, vdots, ddots, hmod, vmod, Base.unitrange(axes(X,1)), Base.unitrange(axes(X,2)))
-end
-
-# Passing (sep, lo, hi) through Base._print_matrix is a trick to make e.g. randn(10^7) print quickly
-# It also gets passed to this function:
-Base.print_matrix_vdots(io::IO, a::AbstractString, b::Vector, (sep, _, _)::Tuple, d::Integer, e::Integer, f::Bool) =
-    Base.print_matrix_vdots(io, a, b, sep, d, e, f)
-
-function Base.print_matrix_row(io::IO,
-        @nospecialize(X::AbstractVector), A::Vector,
-        i::Integer, cols::AbstractVector, (sep, lo, hi)::Tuple,
-        idxlast::Integer=last(axes(X, 2)))
-    @invoke Base.print_matrix_row(io::IO, X::AbstractVector, A::Vector,
-        i::Integer, cols::AbstractVector, sep::AbstractString,
-        2::Int)  # this 2 is a trick to make 2nd column line up!
-    # lo, hi = extrema(_finite, X) .* 1.0  # promote to at least Float64
-    xi = X[i]
-    length(X) < 2 && return
-
-    printstyled(io, "  #  ", hidden=true)
-
-    ismissing(xi) && return
-    isfinite(xi) || return
-    # isnan(xi) && return
-    # xi = xi==Inf ? hi : xi==-Inf ? lo : xi
-
-    WIDTH = 33
-    bold = (xi ≈ lo) || (xi ≈ hi)
-
-    plus = xi<0 ? 0 : round(Int, WIDTH * xi/(hi-min(0,lo)), RoundFromZero)
-    minus = xi>0 ? 0 : round(Int, WIDTH * (-xi)/(max(hi,0)-lo), RoundFromZero)
-    space = lo>=0 ? 0 : round(Int, WIDTH * (-lo)/(max(hi,0)-lo), RoundFromZero) - minus
-    printstyled(io, repeat(" ", space), repeat("-", minus), "|", repeat("+", plus); color=:light_black, bold)
+    lo, hi = extrema(_finite, X) .* 1.0  # promote to at least Float64, to avoid integers
+    skip = count(_isfinite, X) < 2
+    Base._print_matrix(io, Base.inferencebarrier(X), pre, (sep, lo, hi, skip), post, hdots, vdots, ddots, hmod, vmod, Base.unitrange(axes(X,1)), Base.unitrange(axes(X,2)))
 end
 
 _finite(x::Real) = (isnan(x) || isinf(x)) ? zero(x) : x
 _finite(x::Missing) = false
 
+_isfinite(x::Real) = isfinite(x)
+_isfinite(x::Missing) = false
+
+# Passing (sep, lo, hi) through Base._print_matrix is a trick to make e.g. randn(10^7) print quickly
+# It also gets passed to this function:
+Base.print_matrix_vdots(io::IO, a::AbstractString, b::Vector, (sep, _, _, _)::Tuple, d::Integer, e::Integer, f::Bool) =
+    Base.print_matrix_vdots(io, a, b, sep, d, e, f)
+
+function Base.print_matrix_row(io::IO,
+        @nospecialize(X::AbstractVector), A::Vector,
+        i::Integer, cols::AbstractVector, (sep, lo, hi, skip)::Tuple,
+        idxlast::Integer=last(axes(X, 2)))
+
+    @invoke Base.print_matrix_row(io::IO, X::AbstractVector, A::Vector,
+        i::Integer, cols::AbstractVector, sep::AbstractString,
+        2::Int)  # this 2 is a trick to make 2nd column line up!
+
+    skip && return
+    printstyled(io, "  #  ", hidden=true)
+
+    WIDTH = 33.0  # NB not an integer, else `2*WIDTH * xi` overflows Float16
+
+    # https://en.wikipedia.org/wiki/Box-drawing_character
+
+    xi = ismissing(X[i]) ? 0.0 : isnan(X[i]) ? 0.0 : X[i]
+    mid_str = !_isfinite(X[i]) ? "╪" : xi==0 ? "│" : xi>0 ? "┝" : "┥"
+    color = _isfinite(X[i]) ? :light_black : :yellow
+
+    if isfinite(xi)
+        plus = xi<0 ? 0 : round(Int, 2*WIDTH * xi/(hi-min(0,lo)))
+        plus_str = repeat("━", plus÷2) * (isodd(plus) ? "╸" : "")
+
+        minus = xi>0 ? 0 : round(Int, 2*WIDTH * (-xi)/(max(hi,0)-lo))
+        minus_str = (isodd(minus) ? " ╺" : "  ") * repeat("━", minus÷2)
+    else
+        # plus_str = xi>0 ? "━►" : ""
+        # minus_str = xi<0 ? "◄━" : "  "
+        plus_str = xi>0 ? "═▶" : ""
+        minus_str = xi<0 ? "◀═" : "  "
+        minus = 0
+    end
+
+    spaces = lo>=0 ? 0 : round(Int, 2*WIDTH * (-lo)/(max(hi,0)-lo))÷2 - minus÷2
+
+    printstyled(io, repeat(" ", spaces), minus_str, mid_str, plus_str; color)
+end
 
 end # module InTheRed
 

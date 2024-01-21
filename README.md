@@ -4,7 +4,7 @@ This package overloads `Base.show` to change how numbers are printed:
 * Negative numbers are red
 * Zero is light gray
 * `Inf`, `NaN` and `missing` are yellow
-* High- and low-precision numbers (like `Float32`, `Int16`, `BigInt`) are cyan, or magenta if negative.
+* Low-precision numbers (like `Float32`, `Int16`) are cyan, or magenta if negative.
 
 In addition, vectors of real numbers are displayed with a bar graph alongside their values.
 
@@ -14,5 +14,6 @@ In addition, vectors of real numbers are displayed with a bar graph alongside th
 
 ## Elsewhere
 
-The package [OhMyREPL.jl](https://github.com/KristofferC/OhMyREPL.jl) changes the text you type at the prompt, instead of what is printed.
+* [OhMyREPL.jl](https://github.com/KristofferC/OhMyREPL.jl) changes the text you type at the prompt, instead of what is printed.
 
+* [UnicodePlots](https://github.com/JuliaPlots/UnicodePlots.jl) allows much more complicated plotting as text.

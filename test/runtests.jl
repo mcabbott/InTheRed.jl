@@ -22,10 +22,13 @@ end
 end
 
 @testset "vectors" begin
-    @test contains(repr("text/plain", ones(3)), "|+++++++")
-    @test contains(repr("text/plain", -ones(3)), "-------|")
-    @test contains(repr("text/plain", [1,0,-1]), "       |\n")
-    @test contains(repr("text/plain", [1,missing,-1,Inf]), "|+++++++")
+    @test contains(repr("text/plain", ones(3)), "┝━━━━━")
+    @test contains(repr("text/plain", -ones(3)), "━━━━┥")
+    @test contains(repr("text/plain", [1,0,-1]), "    │\n")
+    @test contains(repr("text/plain", [1,missing,-1,Inf]), "┝━━━━━")
+    @test contains(repr("text/plain", [1,missing,-1]), "  ╪\n")
+    @test contains(repr("text/plain", [1,NaN,-1]), "  ╪\n")
+    @test contains(repr("text/plain", [1,Inf,-1]), "═▶\n")
 
     @test contains(repr("text/plain", ones(3), context=stdout), "90m")  # light grey
     @test contains(repr("text/plain", [1,missing,-1], context=stdout), "33m")  # yellow
