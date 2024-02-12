@@ -258,7 +258,7 @@ function Base.print_matrix(io::IO, @nospecialize(X::AbstractVector{<:Union{Real,
                       ddots::AbstractString = "  \u22f1  ",
                       hmod::Integer = 5, vmod::Integer = 5)
     lo, hi = extrema(_finite, X) .* 1.0  # promote to at least Float64, to avoid integers
-    skip = count(_isfinite, X) < 2
+    skip = (count(_isfinite, X) < 2) || (lo == hi == 0)
     Base._print_matrix(io, Base.inferencebarrier(X), pre, (sep, lo, hi, skip), post, hdots, vdots, ddots, hmod, vmod, Base.unitrange(axes(X,1)), Base.unitrange(axes(X,2)))
 end
 

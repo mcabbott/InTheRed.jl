@@ -29,6 +29,7 @@ end
     @test contains(repr("text/plain", [1,missing,-1]), "  ╪\n")
     @test contains(repr("text/plain", [1,NaN,-1]), "  ╪\n")
     @test contains(repr("text/plain", [1,Inf,-1]), "═▶\n")
+    @test contains(repr("text/plain", [0, 0, 0]), "0\n 0")  # was an error
 
     @test contains(repr("text/plain", ones(3), context=stdout), "90m")  # light grey
     @test contains(repr("text/plain", [1,missing,-1], context=stdout), "33m")  # yellow
