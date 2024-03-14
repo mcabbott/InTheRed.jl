@@ -34,3 +34,10 @@ end
     @test contains(repr("text/plain", ones(3), context=stdout), "90m")  # light grey
     @test contains(repr("text/plain", [1,missing,-1], context=stdout), "33m")  # yellow
 end
+
+@testset "complex vectors" begin
+    @test contains(repr("text/plain", ones(3) .+ im), "│↗┝━━━━━━━━━━")
+    @test contains(repr("text/plain", ones(3) .+ 0im), "│➡┝━━━━━━━━━")
+    @test contains(repr("text/plain", ones(3) .- im), "│↘┝━━━━━━━━━━")
+    @test contains(repr("text/plain", [1,2,0,3im]), "│0│")
+end

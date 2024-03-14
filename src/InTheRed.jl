@@ -249,7 +249,7 @@ end
 ##### vectors
 #####
 
-function Base.print_matrix(io::IO, @nospecialize(X::AbstractVector{<:Union{Real, Union{Missing,<:Real}}}),
+function Base.print_matrix(io::IO, @nospecialize(X::AbstractVector{<:Union{Real, Union{Missing,<:Real}, Complex}}),
                       pre::AbstractString = " ",  # pre-matrix string
                       sep::AbstractString = "  ", # separator between elements
                       post::AbstractString = "",  # post-matrix string
@@ -257,16 +257,19 @@ function Base.print_matrix(io::IO, @nospecialize(X::AbstractVector{<:Union{Real,
                       vdots::AbstractString = "\u22ee",
                       ddots::AbstractString = "  \u22f1  ",
                       hmod::Integer = 5, vmod::Integer = 5)
-    lo, hi = extrema(_finite, X) .* 1.0  # promote to at least Float64, to avoid integers
-    skip = (count(_isfinite, X) < 2) || (lo == hi == 0)
+    lo, hi = extrema(_barlength, X)
+    skip = (count(_isfinite, X) < 2) || (lo == hi == 0.0)
     Base._print_matrix(io, Base.inferencebarrier(X), pre, (sep, lo, hi, skip), post, hdots, vdots, ddots, hmod, vmod, Base.unitrange(axes(X,1)), Base.unitrange(axes(X,2)))
 end
 
-_finite(x::Real) = (isnan(x) || isinf(x)) ? zero(x) : x
-_finite(x::Missing) = false
+# This promotes to at least Float64, to avoid integers
+_barlength(x::Real) = (isnan(x) || isinf(x)) ? 1.0*zero(x) : 1.0*x
+_barlength(x::Missing) = 0.0
+_barlength(x::Complex) = _barlength(abs(x))
 
 _isfinite(x::Real) = isfinite(x)
 _isfinite(x::Missing) = false
+_isfinite(x::Complex) = isfinite(abs(x))
 
 # Passing (sep, lo, hi) through Base._print_matrix is a trick to make e.g. randn(10^7) print quickly
 # It also gets passed to this function:
@@ -289,22 +292,27 @@ function Base.print_matrix_row(io::IO,
 
     # https://en.wikipedia.org/wiki/Box-drawing_character
 
-    xi = ismissing(X[i]) ? 0.0 : isnan(X[i]) ? 0.0 : X[i]
+    xi = _barlength(X[i])
     mid_str = !_isfinite(X[i]) ? "╪" : xi==0 ? "│" : xi>0 ? "┝" : "┥"
     color = _isfinite(X[i]) ? :light_black : :yellow
 
-    if isfinite(xi)
+    if isfinite(X[i])
         plus = xi<0 ? 0 : round(Int, 2*WIDTH * xi/(hi-min(0,lo)))
         plus_str = repeat("━", plus÷2) * (isodd(plus) ? "╸" : "")
 
         minus = xi>0 ? 0 : round(Int, 2*WIDTH * (-xi)/(max(hi,0)-lo))
         minus_str = (isodd(minus) ? " ╺" : "  ") * repeat("━", minus÷2)
     else
+        xi_inf = X[i] isa Complex ? abs(X[i]) : X[i]
         # plus_str = xi>0 ? "━►" : ""
         # minus_str = xi<0 ? "◄━" : "  "
-        plus_str = xi>0 ? "═▶" : ""
-        minus_str = xi<0 ? "◀═" : "  "
+        plus_str = xi_inf>0 ? "═▶" : ""
+        minus_str = xi_inf<0 ? "◀═" : "  "
         minus = 0
+    end
+    if X[i] isa Complex
+        @assert minus == 0
+        minus_str = " │" * _arrow(X[i])
     end
 
     spaces = lo>=0 ? 0 : round(Int, 2*WIDTH * (-lo)/(max(hi,0)-lo))÷2 - minus÷2
@@ -312,10 +320,20 @@ function Base.print_matrix_row(io::IO,
     printstyled(io, repeat(" ", spaces), minus_str, mid_str, plus_str; color)
 end
 
+function _arrow(x::Complex)
+    symb = collect("➡️↗️⬆️↖️⬅️↙️⬇️↘️0️⃣⏹")[1:2:end]
+    isfinite(x) || return " "
+    iszero(x) && return symb[end-1]
+    i = trunc(Int, mod(angle(x) - pi/8, 2pi) * (4/pi)) + 1
+    symb[mod1(i+1, 8)]
+end
+
 end # module InTheRed
 
 
 #=
+
+➡️↗️⬆️↖️⬅️↙️⬇️↘️0️⃣⏹
 
 enable_ansi  = get(text_colors, color, text_colors[:default]) *
                    (bold ? text_colors[:bold] : "") *
