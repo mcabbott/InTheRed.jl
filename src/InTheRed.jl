@@ -210,6 +210,61 @@ end
 # That's called by b & c but not d:
 # (a = 3f0, b = randn(3) .> 0, c = [true, false], d = randn(1000) .> 0)
 
+#####
+##### complex
+#####
+
+# function show(io::IO, z::Complex)
+#     r, i = reim(z)
+#     compact = get(io, :compact, false)::Bool
+#     show(io, r)
+#     if signbit(i) && !isnan(i)
+#         print(io, compact ? "-" : " - ")
+#         if isa(i,Signed) && !isa(i,BigInt) && i == typemin(typeof(i))
+#             show(io, -widen(i))
+#         else
+#             show(io, -i)
+#         end
+#     else
+#         print(io, compact ? "+" : " + ")
+#         show(io, i)
+#     end
+#     if !(isa(i,Integer) && !isa(i,Bool) || isa(i,AbstractFloat) && isfinite(i))
+#         print(io, "*")
+#     end
+#     print(io, "im")
+# end
+
+function Base.show(io::IO, z::Complex{<:Union{Integer, AbstractFloat}})
+    r, i = reim(z)
+    compact = get(io, :compact, false)::Bool
+    show(io, r)
+    if signbit(i) && !isnan(i)
+        print(io, compact ? "-" : " - ")
+        # if isa(i,Signed) && !isa(i,BigInt) && i == typemin(typeof(i))
+        #     show(io, -widen(i))
+        # else
+        #     show(io, -i)
+        # end
+        str = sprint(show, i, context=IOContext(io))
+        j = findfirst('-', str)
+        str = string(str[1:j-1], str[j+1:end])
+        print(io, str)
+    else
+        print(io, compact ? "+" : " + ")
+        show(io, i)
+    end
+    if !(isa(i,Integer) && !isa(i,Bool) || isa(i,AbstractFloat) && isfinite(i))
+        print(io, "*")
+    end
+    print(io, "im")
+
+    # iscolor = get(io, :color, false)::Bool
+    # q = iscolor && _preprint(io, i)
+    # print(io, "im")  # this looks weird for randn(ComplexF32, 30)
+    # q && _postprint(io)
+end
+
 
 #####
 ##### types
@@ -286,7 +341,7 @@ function Base.print_matrix_row(io::IO,
         2::Int)  # this 2 is a trick to make 2nd column line up!
 
     skip && return
-    printstyled(io, "  #  ", hidden=true)
+    printstyled(io, "  #  ", hidden=true, color=:light_black)  # some terminals can't do hidden=true
 
     WIDTH = 33.0  # NB not an integer, else `2*WIDTH * xi` overflows Float16
 
@@ -320,12 +375,14 @@ function Base.print_matrix_row(io::IO,
     printstyled(io, repeat(" ", spaces), minus_str, mid_str, plus_str; color)
 end
 
+ARROWS = collect("➡️↗️⬆️↖️⬅️↙️⬇️↘️0️⃣⏹")[1:2:end]
+
 function _arrow(x::Complex)
-    symb = collect("➡️↗️⬆️↖️⬅️↙️⬇️↘️0️⃣⏹")[1:2:end]
     isfinite(x) || return " "
-    iszero(x) && return symb[end-1]
-    i = trunc(Int, mod(angle(x) - pi/8, 2pi) * (4/pi)) + 1
-    symb[mod1(i+1, 8)]
+    iszero(x) && return ARROWS[end-1]
+    i = trunc(Int, mod(angle(x) - pi / 8, 2pi) * (4 / pi)) + 1
+    ARROWS[mod1(i + 1, 8)]
+end
 end
 
 end # module InTheRed
