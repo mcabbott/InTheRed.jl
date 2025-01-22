@@ -8,6 +8,7 @@ This package overloads `Base.show` to change how numbers are printed:
 * High- and low-precision numbers (like `Float32`, `Int16`, `BigInt`) are cyan, or magenta if negative.
 
 In addition, vectors of real numbers are displayed with a bar graph alongside their values.
+And ranges are printed with more detail.
 
 # Examples
 
@@ -43,6 +44,17 @@ julia> sort(vec(x))[2:2:end]
    2.0  #                    ┝━━━━━━━━━━━
    3.0  #                    ┝━━━━━━━━━━━━━━━━╸
  NaN    #                    ╪
+
+julia> 0:0.1:1
+11-element StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}, Int64}:
+# range(0.0, 1.0, length=11) === 0.0:0.1:1.0
+ 0.0  #    │
+ 0.1  #    ┝━━━╸
+ 0.2  #    ┝━━━━━━╸
+ ⋮
+ 0.8  #    ┝━━━━━━━━━━━━━━━━━━━━━━━━━━╸
+ 0.9  #    ┝━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╸
+ 1.0  #    ┝━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 """
 module InTheRed
@@ -383,6 +395,97 @@ function _arrow(x::Complex)
     i = trunc(Int, mod(angle(x) - pi / 8, 2pi) * (4 / pi)) + 1
     ARROWS[mod1(i + 1, 8)]
 end
+
+#####
+##### ranges
+#####
+
+# show(io::IO, ::MIME"text/plain", r::AbstractRange) = show(io, r) # always use the compact form for printing ranges
+
+# function show(io::IO, ::MIME"text/plain", r::LinRange)
+#     isempty(r) && return show(io, r)
+#     # show for LinRange, e.g.
+#     # range(1, stop=3, length=7)
+#     # 7-element LinRange{Float64}:
+#     #   1.0,1.33333,1.66667,2.0,2.33333,2.66667,3.0
+#     summary(io, r)
+#     println(io, ":")
+#     print_range(io, r)
+# end
+
+# function show(io::IO, ::MIME"text/plain", r::LogRange)  # display LogRange like LinRange
+#     isempty(r) && return show(io, r)
+#     summary(io, r)
+#     println(io, ":")
+#     print_range(io, r, " ", ", ", "", " \u2026 ")
+# end
+
+Base.show(io::IO, ::MIME{Symbol("text/plain")}, r::AbstractRange{<:Real}) = _bigshowrange(io, r)
+Base.show(io::IO, ::MIME{Symbol("text/plain")}, r::AbstractRange{<:Complex}) = _bigshowrange(io, r)
+Base.show(io::IO, ::MIME{Symbol("text/plain")}, r::LinRange{<:Real}) = _bigshowrange(io, r)
+Base.show(io::IO, ::MIME{Symbol("text/plain")}, r::LinRange{<:Complex}) = _bigshowrange(io, r)
+Base.show(io::IO, ::MIME{Symbol("text/plain")}, r::Base.LogRange{<:AbstractFloat}) = _bigshowrange(io, r)
+
+function _bigshowrange(io, r)
+    summary(io, r)
+    println(io, ":")
+    _smallshowrange(io, r)
+    isempty(r) && return
+
+    # From function show(io::IO, ::MIME"text/plain", X::AbstractArray)
+    if get(io, :limit, false)::Bool && displaysize(io)[1] - 4 <= 0
+        return print(io, " …")
+    else
+        println(io)
+    end
+
+    # vsize = min(13, displaysize(io)[1])
+    vsize = min(11, displaysize(io)[1])
+    io = IOContext(io, :typeinfo => eltype(r), :displaysize => (vsize, displaysize(io)[2]))
+    # recur_io = IOContext(io, :SHOWN_SET => r)
+    Base.print_array(io, r)
+end
+
+function _smallshowrange(io, r)
+    printstyled(io, "# ", repr(r), color=:light_black)
+end
+function _smallshowrange(io, r::StepRangeLen)
+    printstyled(io, "# range(", repr(first(r)), ", ", repr(last(r)), ", length=", repr(length(r)), ")", color=:light_black)
+    # print(io, "range(")
+    # show(io, first(r))
+    # print(io, ", ")
+    # show(io, last(r))
+    # print(io, ", length=", length(r), ")")
+    if eltype(r) <: Real
+        printstyled(io, " === ", r, color=:light_black)
+    end
+end
+function _smallshowrange(io, r::StepRange)
+    printstyled(io, "# range(", repr(first(r)), ", ", repr(last(r)), ", step=", repr(step(r)), ")", color=:light_black)
+    # print(io, "range(")
+    # show(io, first(r))
+    # print(io, ", ")
+    # show(io, last(r))
+    # print(io, ", step=")
+    # show(io, step(r))
+    # print(io, ")")
+    printstyled(io, " === ", r, color=:light_black)
+end
+function _smallshowrange(io, r::LinRange)
+    printstyled(io, "# LinRange(", repr(first(r)), ", ", repr(last(r)), ", ", repr(length(r)), ")", color=:light_black)
+    # print(io, "LinRange(")
+    # show(io, first(r))
+    # print(io, ", ")
+    # show(io, last(r))
+    # print(io, ", ", length(r), ")")
+end
+function _smallshowrange(io, r::Base.LogRange)
+    printstyled(io, "# logrange(", repr(first(r)), ", ", repr(last(r)), ", length=", repr(length(r)), ")", color=:light_black)
+    # print(io, "logrange(")
+    # show(io, first(r))
+    # print(io, ", ")
+    # show(io, last(r))
+    # print(io, ", length=", length(r), ")")
 end
 
 end # module InTheRed
