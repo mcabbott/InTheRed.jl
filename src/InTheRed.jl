@@ -1,62 +1,3 @@
-"""
-    InTheRed.jl
-
-This package overloads `Base.show` to change how numbers are printed:
-* Negative numbers are red
-* Zero is light gray
-* `Inf`, `NaN` and `missing` are yellow
-* High- and low-precision numbers (like `Float32`, `Int16`, `BigInt`) are cyan, or magenta if negative.
-
-In addition, vectors of real numbers are displayed with a bar graph alongside their values.
-And ranges are printed with more detail.
-
-# Examples
-
-```
-julia> using InTheRed
-
-julia> rand(-3:3, 2, 10)
-2×10 Matrix{Int64}:
- 1  2  -3  -2  2  -1  1   2   1  3
- 0  2   3  -3  2   1  0  -1  -2  2
-
-julia> x = ans .+ 0f0; x[3] = NaN; x[6] = Inf; x[end-2] = -Inf;
-
-julia> x
-2×10 Matrix{Float32}:
- 1.0  NaN    -3.0  -2.0  2.0  -1.0  1.0   2.0    1.0  3.0
- 0.0    2.0  Inf   -3.0  2.0   1.0  0.0  -1.0  -Inf   2.0
-
-julia> x .> 0
-2×10 BitMatrix:
- 1  0  0  0  1  0  1  1  1  1
- 0  1  1  0  1  1  0  0  0  1
-
-julia> sort(vec(x))[2:2:end]
-10-element Vector{Float32}:
-  -3.0  #   ╺━━━━━━━━━━━━━━━━┥
-  -2.0  #         ━━━━━━━━━━━┥
-  -1.0  #              ╺━━━━━┥
-   0.0  #                    │
-   1.0  #                    ┝━━━━━╸
-   1.0  #                    ┝━━━━━╸
-   2.0  #                    ┝━━━━━━━━━━━
-   2.0  #                    ┝━━━━━━━━━━━
-   3.0  #                    ┝━━━━━━━━━━━━━━━━╸
- NaN    #                    ╪
-
-julia> 0:0.1:1
-11-element StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}, Int64}:
-# range(0.0, 1.0, length=11) === 0.0:0.1:1.0
- 0.0  #    │
- 0.1  #    ┝━━━╸
- 0.2  #    ┝━━━━━━╸
- ⋮
- 0.8  #    ┝━━━━━━━━━━━━━━━━━━━━━━━━━━╸
- 0.9  #    ┝━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╸
- 1.0  #    ┝━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-"""
 module InTheRed
 
 function _preprint(io::IO, x::Number, pos=nothing, neg::Symbol=:red)
@@ -64,7 +5,7 @@ function _preprint(io::IO, x::Number, pos=nothing, neg::Symbol=:red)
         print(io, Base.text_colors[:yellow])
     elseif !isfinite(x)
         print(io, Base.text_colors[:yellow])
-    elseif iszero(x)
+    elseif _iszero(x)
         print(io, Base.text_colors[:light_black])
     elseif x < 0
         print(io, Base.text_colors[neg])
@@ -81,10 +22,52 @@ end
 
 _postprint(io::IO) = print(io, Base.text_colors[:default])
 
+const ALMOST_ZERO = Ref(1.0e-32)
+
+_iszero(x::Real) = abs2(x) < ALMOST_ZERO[]
+_iszero(x::Complex) = abs2(x) < ALMOST_ZERO[]
+_iszero(x::Number) = iszero(x)
+
+"""
+    threshold!(x)
+
+By default, numbers `abs(x) < 1e-16` are printed in light grey, like zero.
+This function lets you adjust the upper threshold.
+
+# Example
+
+```
+julia> LinRange(-0.1, 0.2, 4)
+4-element LinRange{Float64, Int64}:
+# LinRange(-0.1, 0.2, 4)
+ -0.1                     #    ━━━━━━━━━━━┥
+ -1.3877787807814457e-17  #               ┥
+  0.09999999999999999     #               ┝━━━━━━━━━━━
+  0.2                     #               ┝━━━━━━━━━━━━━━━━━━━━━━
+
+julia> InTheRed.threshold!(1e-20)
+
+julia> LinRange(-0.1, 0.2, 4)  # now -1.387e-17 is printed in red
+4-element LinRange{Float64, Int64}:
+# LinRange(-0.1, 0.2, 4)
+ -0.1                     #    ━━━━━━━━━━━┥
+ -1.3877787807814457e-17  #               ┥
+  0.09999999999999999     #               ┝━━━━━━━━━━━
+  0.2                     #               ┝━━━━━━━━━━━━━━━━━━━━━━
+```
+"""
+function threshold!(x::Real)
+    x < 0 && error("can't set a negative threshold, sorry")
+    ALMOST_ZERO[] = abs2(x)
+    nothing
+end
+
+VERSION >= v"1.11.0-DEV.469" && eval(Meta.parse("public threshold!"))
+
 # Fix Diagonal([1,2,-3])
-function Base.replace_with_centered_mark(s::String; c::AbstractChar = '⋅')  # more specific than Base
+function Base.replace_with_centered_mark(s::String; c::AbstractChar='⋅')  # more specific than Base
     N = Base.textwidth(Base.ANSIIterator(s))
-    ret =join(setindex!([" " for i=1:N],string(c),ceil(Int,N/2)))
+    ret = join(setindex!([" " for i = 1:N], string(c), ceil(Int, N / 2)))
     Base.text_colors[:light_black] * ret * Base.text_colors[:default]
 end
 
@@ -130,7 +113,7 @@ end
 # end
 
 # function Base.show(io::IO, x::BigFloat)  # causes method overwritten warnings
-function Base.show(io::Union{Base.LibuvStream, Base.AbstractPipe}, x::BigFloat)  # just wide enough for stdout?
+function Base.show(io::Union{Base.LibuvStream,Base.AbstractPipe}, x::BigFloat)  # just wide enough for stdout?
     iscolor = get(io, :color, false)::Bool
     q = iscolor && _preprint(io, x, :cyan, :magenta)
     # Base.@invoke show(io::IO, x::BigFloat)
@@ -188,7 +171,7 @@ end
 
 # show(io::IO, x::BigInt) = print(io, string(x))
 
-function Base.show(io::Union{Base.LibuvStream, Base.AbstractPipe}, x::BigInt)
+function Base.show(io::Union{Base.LibuvStream,Base.AbstractPipe}, x::BigInt)
     iscolor = get(io, :color, false)::Bool
     iscolor && _preprint(io, x, :cyan, :magenta)
     print(io, string(x))
@@ -202,7 +185,7 @@ end
 # WARNING: Method definition show(IO, Bool) in module Base at show.jl:1141 overwritten in module InTheRed at /Users/me/.julia/dev/InTheRed/src/InTheRed.jl:114.
 #   ** incremental compilation may be fatally broken for this module **
 
-function Base.show(io::Union{Base.LibuvStream, Base.AbstractPipe}, b::Bool)
+function Base.show(io::Union{Base.LibuvStream,Base.AbstractPipe}, b::Bool)
     knowsbool = get(io, :typeinfo, Any) === Bool
     usecolor = get(io, :color, false)::Bool && knowsbool
     usecolor && _preprint(io, b, :cyan, :magenta)
@@ -221,6 +204,17 @@ end
 
 # That's called by b & c but not d:
 # (a = 3f0, b = randn(3) .> 0, c = [true, false], d = randn(1000) .> 0)
+
+function Base.show(io::IO, ::MIME"text/plain", x::Unsigned)
+    iscolor = get(io, :color, false)::Bool
+    iscolor && _preprint(io, x, :cyan, :magenta)
+    show(io, x)
+    iscolor && _postprint(io)
+    printstyled(io, "  #"; hidden=true, color=:light_black)
+    n = ndigits(typemax(typeof(x)))  # padding for e.g. UInt16.(5:2:13)
+    printstyled(io, " == ", rpad(Int128(x), n); color=:light_black)
+end
+
 
 #####
 ##### complex
@@ -247,7 +241,7 @@ end
 #     print(io, "im")
 # end
 
-function Base.show(io::IO, z::Complex{<:Union{Integer, AbstractFloat}})
+function Base.show(io::IO, z::Complex{<:Union{Integer,AbstractFloat}})
     r, i = reim(z)
     compact = get(io, :compact, false)::Bool
     show(io, r)
@@ -266,7 +260,7 @@ function Base.show(io::IO, z::Complex{<:Union{Integer, AbstractFloat}})
         print(io, compact ? "+" : " + ")
         show(io, i)
     end
-    if !(isa(i,Integer) && !isa(i,Bool) || isa(i,AbstractFloat) && isfinite(i))
+    if !(isa(i, Integer) && !isa(i, Bool) || isa(i, AbstractFloat) && isfinite(i))
         print(io, "*")
     end
     print(io, "im")
@@ -295,7 +289,7 @@ end
 #####
 
 
-function Base.show(io::Union{Base.LibuvStream, Base.AbstractPipe}, ::Nothing)  # more specific than io::IO
+function Base.show(io::Union{Base.LibuvStream,Base.AbstractPipe}, ::Nothing)  # more specific than io::IO
     iscolor = get(io, :color, false)::Bool
     iscolor && _preprint(io, 0)
     write(io, "nothing")
@@ -303,7 +297,7 @@ function Base.show(io::Union{Base.LibuvStream, Base.AbstractPipe}, ::Nothing)  #
     return
 end
 
-function Base.show(io::Union{Base.LibuvStream, Base.AbstractPipe}, x::Missing)  # more specific than io::IO
+function Base.show(io::Union{Base.LibuvStream,Base.AbstractPipe}, x::Missing)  # more specific than io::IO
     iscolor = get(io, :color, false)::Bool
     iscolor && _preprint(io, NaN)
     write(io, "missing")
@@ -316,26 +310,26 @@ end
 ##### vectors
 #####
 
-function Base.print_matrix(io::IO, @nospecialize(X::AbstractVector{<:Union{Real, Union{Missing,<:Real}, Complex}}),
-                      pre::AbstractString = " ",  # pre-matrix string
-                      sep::AbstractString = "  ", # separator between elements
-                      post::AbstractString = "",  # post-matrix string
-                      hdots::AbstractString = "  \u2026  ",
-                      vdots::AbstractString = "\u22ee",
-                      ddots::AbstractString = "  \u22f1  ",
-                      hmod::Integer = 5, vmod::Integer = 5)
+function Base.print_matrix(io::IO, @nospecialize(X::AbstractVector{<:Union{Real,Union{Missing,<:Real},Union{Nothing,<:Real},Complex}}),
+    pre::AbstractString=" ",  # pre-matrix string
+    sep::AbstractString="  ", # separator between elements
+    post::AbstractString="",  # post-matrix string
+    hdots::AbstractString="  \u2026  ",
+    vdots::AbstractString="\u22ee",
+    ddots::AbstractString="  \u22f1  ",
+    hmod::Integer=5, vmod::Integer=5)
     lo, hi = extrema(_barlength, X)
     skip = (count(_isfinite, X) < 2) || (lo == hi == 0.0)
-    Base._print_matrix(io, Base.inferencebarrier(X), pre, (sep, lo, hi, skip), post, hdots, vdots, ddots, hmod, vmod, Base.unitrange(axes(X,1)), Base.unitrange(axes(X,2)))
+    Base._print_matrix(io, Base.inferencebarrier(X), pre, (sep, lo, hi, skip), post, hdots, vdots, ddots, hmod, vmod, Base.unitrange(axes(X, 1)), Base.unitrange(axes(X, 2)))
 end
 
 # This promotes to at least Float64, to avoid integers
-_barlength(x::Real) = (isnan(x) || isinf(x)) ? 1.0*zero(x) : 1.0*x
-_barlength(x::Missing) = 0.0
+_barlength(x::Real) = (isnan(x) || isinf(x)) ? 1.0 * zero(x) : 1.0 * x
+_barlength(x::Union{Missing,Nothing}) = 0.0
 _barlength(x::Complex) = _barlength(abs(x))
 
 _isfinite(x::Real) = isfinite(x)
-_isfinite(x::Missing) = false
+_isfinite(x::Union{Missing,Nothing}) = false
 _isfinite(x::Complex) = isfinite(abs(x))
 
 # Passing (sep, lo, hi) through Base._print_matrix is a trick to make e.g. randn(10^7) print quickly
@@ -344,9 +338,9 @@ Base.print_matrix_vdots(io::IO, a::AbstractString, b::Vector, (sep, _, _, _)::Tu
     Base.print_matrix_vdots(io, a, b, sep, d, e, f)
 
 function Base.print_matrix_row(io::IO,
-        @nospecialize(X::AbstractVector), A::Vector,
-        i::Integer, cols::AbstractVector, (sep, lo, hi, skip)::Tuple,
-        idxlast::Integer=last(axes(X, 2)))
+    @nospecialize(X::AbstractVector), A::Vector,
+    i::Integer, cols::AbstractVector, (sep, lo, hi, skip)::Tuple,
+    idxlast::Integer=last(axes(X, 2)))
 
     @invoke Base.print_matrix_row(io::IO, X::AbstractVector, A::Vector,
         i::Integer, cols::AbstractVector, sep::AbstractString,
@@ -360,21 +354,21 @@ function Base.print_matrix_row(io::IO,
     # https://en.wikipedia.org/wiki/Box-drawing_character
 
     xi = _barlength(X[i])
-    mid_str = !_isfinite(X[i]) ? "╪" : xi==0 ? "│" : xi>0 ? "┝" : "┥"
+    mid_str = !_isfinite(X[i]) ? "╪" : xi == 0 ? "│" : xi > 0 ? "┝" : "┥"
     color = _isfinite(X[i]) ? :light_black : :yellow
 
     if isfinite(X[i])
-        plus = xi<0 ? 0 : round(Int, 2*WIDTH * xi/(hi-min(0,lo)))
-        plus_str = repeat("━", plus÷2) * (isodd(plus) ? "╸" : "")
+        plus = xi < 0 ? 0 : round(Int, 2 * WIDTH * xi / (hi - min(0, lo)))
+        plus_str = repeat("━", plus ÷ 2) * (isodd(plus) ? "╸" : "")
 
-        minus = xi>0 ? 0 : round(Int, 2*WIDTH * (-xi)/(max(hi,0)-lo))
-        minus_str = (isodd(minus) ? " ╺" : "  ") * repeat("━", minus÷2)
+        minus = xi > 0 ? 0 : round(Int, 2 * WIDTH * (-xi) / (max(hi, 0) - lo))
+        minus_str = (isodd(minus) ? " ╺" : "  ") * repeat("━", minus ÷ 2)
     else
         xi_inf = X[i] isa Complex ? abs(X[i]) : X[i]
         # plus_str = xi>0 ? "━►" : ""
         # minus_str = xi<0 ? "◄━" : "  "
-        plus_str = xi_inf>0 ? "═▶" : ""
-        minus_str = xi_inf<0 ? "◀═" : "  "
+        plus_str = xi_inf > 0 ? "═▶" : ""
+        minus_str = xi_inf < 0 ? "◀═" : "  "
         minus = 0
     end
     if X[i] isa Complex
@@ -382,7 +376,7 @@ function Base.print_matrix_row(io::IO,
         minus_str = " │" * _arrow(X[i])
     end
 
-    spaces = lo>=0 ? 0 : round(Int, 2*WIDTH * (-lo)/(max(hi,0)-lo))÷2 - minus÷2
+    spaces = lo >= 0 ? 0 : round(Int, 2 * WIDTH * (-lo) / (max(hi, 0) - lo)) ÷ 2 - minus ÷ 2
 
     printstyled(io, repeat(" ", spaces), minus_str, mid_str, plus_str; color)
 end
@@ -424,7 +418,9 @@ Base.show(io::IO, ::MIME{Symbol("text/plain")}, r::AbstractRange{<:Real}) = _big
 Base.show(io::IO, ::MIME{Symbol("text/plain")}, r::AbstractRange{<:Complex}) = _bigshowrange(io, r)
 Base.show(io::IO, ::MIME{Symbol("text/plain")}, r::LinRange{<:Real}) = _bigshowrange(io, r)
 Base.show(io::IO, ::MIME{Symbol("text/plain")}, r::LinRange{<:Complex}) = _bigshowrange(io, r)
-Base.show(io::IO, ::MIME{Symbol("text/plain")}, r::Base.LogRange{<:AbstractFloat}) = _bigshowrange(io, r)
+if isdefined(Base, :LogRange)
+    Base.show(io::IO, ::MIME{Symbol("text/plain")}, r::Base.LogRange{<:AbstractFloat}) = _bigshowrange(io, r)
+end
 
 function _bigshowrange(io, r)
     summary(io, r)
@@ -479,13 +475,15 @@ function _smallshowrange(io, r::LinRange)
     # show(io, last(r))
     # print(io, ", ", length(r), ")")
 end
-function _smallshowrange(io, r::Base.LogRange)
-    printstyled(io, "# logrange(", repr(first(r)), ", ", repr(last(r)), ", length=", repr(length(r)), ")", color=:light_black)
-    # print(io, "logrange(")
-    # show(io, first(r))
-    # print(io, ", ")
-    # show(io, last(r))
-    # print(io, ", length=", length(r), ")")
+if isdefined(Base, :LogRange)
+    function _smallshowrange(io, r::Base.LogRange)
+        printstyled(io, "# logrange(", repr(first(r)), ", ", repr(last(r)), ", length=", repr(length(r)), ")", color=:light_black)
+        # print(io, "logrange(")
+        # show(io, first(r))
+        # print(io, ", ")
+        # show(io, last(r))
+        # print(io, ", length=", length(r), ")")
+    end
 end
 
 end # module InTheRed
